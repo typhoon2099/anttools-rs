@@ -7,6 +7,11 @@ pub struct Header {
 impl Header {
     pub fn from(from: &[u8]) -> Option<Header> {
         let header_size = *from.first().unwrap() as usize;
+
+        if from.len() < header_size {
+            return None
+        }
+
         let header = &from[..header_size];
         let protocol_version = *header.get(1).unwrap();
         let profile_version = u16::from_le_bytes([header[2], header[3]]);
@@ -33,5 +38,12 @@ mod tests {
         assert_eq!(header.protocol_version, 32);
         assert_eq!(header.profile_version, 2147);
         assert_eq!(header.data_size, 94080);
+    }
+
+    #[test]
+    fn wrong_length() {
+        let header = Header::from(&VALID_HEADER[0..11]);
+
+        assert!(header.is_none());
     }
 }
