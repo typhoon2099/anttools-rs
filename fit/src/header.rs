@@ -1,5 +1,12 @@
 use std::str;
 
+#[derive(Debug, PartialEq)]
+pub enum Error {
+    WrongLength,
+    FitTextMissing,
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Header {
     pub protocol_version: u8,
     pub profile_version: u16,
@@ -7,24 +14,24 @@ pub struct Header {
 }
 
 impl Header {
-    pub fn from(from: &[u8]) -> Option<Header> {
+    pub fn from(from: &[u8]) -> Result<Header, Error> {
         let header_size = *from.first().unwrap() as usize;
 
         if from.len() < header_size {
-            return None
+            return Err(Error::WrongLength)
         }
 
         let header = &from[..header_size];
 
         if str::from_utf8(&header[8..=11]) != Ok(".FIT") {
-            return None
+            return Err(Error::FitTextMissing)
         }
 
         let protocol_version = *header.get(1).unwrap();
         let profile_version = u16::from_le_bytes([header[2], header[3]]);
         let data_size = u32::from_le_bytes([header[4], header[5], header[6], header[7]]);
 
-        Some(Header {
+        Ok(Header {
             protocol_version,
             profile_version,
             data_size,
@@ -50,15 +57,15 @@ mod tests {
 
     #[test]
     fn wrong_length() {
-        let header = Header::from(&VALID_HEADER[0..11]);
+        let result = Header::from(&VALID_HEADER[0..11]);
 
-        assert!(header.is_none());
+        assert_eq!(result, Err(Error::WrongLength));
     }
 
     #[test]
     fn no_fit_text() {
-        let header = Header::from(&NO_FIT);
+        let result = Header::from(&NO_FIT);
 
-        assert!(header.is_none());
+        assert_eq!(result, Err(Error::FitTextMissing));
     }
 }
