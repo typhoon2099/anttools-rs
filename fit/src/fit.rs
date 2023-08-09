@@ -1,14 +1,17 @@
+use crate::header::Header;
 use std::io::Read;
 use std::{fs::File, path::PathBuf};
 
 #[derive(Debug, PartialEq)]
 pub struct Fit {
     raw: Vec<u8>,
+    header: Header,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
     FileNotFound,
+    FileNotValid,
 }
 
 impl Fit {
@@ -18,7 +21,13 @@ impl Fit {
             Ok(mut file) => {
                 let mut raw = vec![];
                 match file.read_to_end(&mut raw) {
-                    Ok(_) => Ok(Fit { raw }),
+                    Ok(_) => {
+                        let header = match Header::from(&raw) {
+                            Ok(header) => header,
+                            Err(_error) => return Err(Error::FileNotValid),
+                        };
+                        Ok(Fit { raw, header })
+                    }
                     Err(_) => Err(Error::FileNotFound),
                 }
             }
@@ -50,6 +59,15 @@ mod tests {
         let path: PathBuf = PathBuf::from("../data/Activity_missing.fit");
         let activity = Fit::from_file(path);
         let expected = Err(Error::FileNotFound);
+
+        assert_eq!(activity, expected);
+    }
+
+    #[test]
+    fn invalid_fit_file_returns_error() {
+        let path: PathBuf = PathBuf::from("../data/Activity_invalid.fit");
+        let activity = Fit::from_file(path);
+        let expected = Err(Error::FileNotValid);
 
         assert_eq!(activity, expected);
     }
