@@ -11,25 +11,26 @@ pub enum Error {
 pub struct Header {
     pub protocol_version: u8,
     pub profile_version: u16,
-    pub data_size: u32,
+    pub data_length: u32,
+    pub header_length: u8,
 }
 
 impl Header {
     pub fn from(from: &[u8]) -> Result<Header, Error> {
-        let header_size = *from.first().unwrap() as usize;
+        let header_length = *from.first().unwrap();
 
-        if from.len() < header_size {
+        if from.len() < header_length.into() {
             return Err(Error::WrongLength);
         }
 
-        let header = &from[..header_size];
+        let header = &from[..header_length.into()];
 
         if str::from_utf8(&header[8..=11]) != Ok(".FIT") {
             return Err(Error::FitTextMissing);
         }
 
         // 12 Byte headers are legacy and don't contain a checksum
-        if header_size >= 14 {
+        if header_length >= 14 {
             let checksum = u16::from_le_bytes([header[12], header[13]]);
 
             if checksum != 0 && checksum != Self::crc(&header[0..12]) {
@@ -39,12 +40,13 @@ impl Header {
 
         let protocol_version = *header.get(1).unwrap();
         let profile_version = u16::from_le_bytes([header[2], header[3]]);
-        let data_size = u32::from_le_bytes([header[4], header[5], header[6], header[7]]);
+        let data_length = u32::from_le_bytes([header[4], header[5], header[6], header[7]]);
 
         Ok(Header {
             protocol_version,
             profile_version,
-            data_size,
+            data_length,
+            header_length,
         })
     }
 
@@ -85,7 +87,8 @@ mod tests {
 
         assert_eq!(header.protocol_version, 32);
         assert_eq!(header.profile_version, 2147);
-        assert_eq!(header.data_size, 94080);
+        assert_eq!(header.data_length, 94080);
+        assert_eq!(header.header_length, 14);
     }
 
     #[test]

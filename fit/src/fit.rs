@@ -6,7 +6,7 @@ use std::{fs::File, path::PathBuf};
 pub struct Fit {
     pub protocol_version: u8,
     pub profile_version: u16,
-    pub data_size: u32,
+    pub records: Vec<u8>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -36,10 +36,16 @@ impl Fit {
             Err(_error) => return Err(Error::FileNotValid),
         };
 
+        let records = data[(header.header_length as usize)
+            ..(header.header_length as usize + header.data_length as usize)]
+            .to_vec();
+
+        println!("{} {}", records.len(), header.data_length);
+
         Ok(Fit {
             protocol_version: header.protocol_version,
             profile_version: header.profile_version,
-            data_size: header.data_size,
+            records,
         })
     }
 }
@@ -55,7 +61,16 @@ mod tests {
         let path: PathBuf = PathBuf::from("../data/Activity.fit");
         let activity = Fit::from_file(path).unwrap();
 
-        assert_eq!(activity.data_size, 94080);
+        assert_eq!(activity.protocol_version, 32);
+        assert_eq!(activity.profile_version, 2147);
+    }
+
+    #[test]
+    fn stores_records() {
+        let path: PathBuf = PathBuf::from("../data/Activity.fit");
+        let activity = Fit::from_file(path).unwrap();
+
+        assert_eq!(activity.records.len(), 94080);
     }
 
     #[test]
@@ -66,7 +81,7 @@ mod tests {
 
         let activity = Fit::from_bytes(data).unwrap();
 
-        assert_eq!(activity.data_size, 94080);
+        assert_eq!(activity.protocol_version, 32);
     }
 
     #[test]
