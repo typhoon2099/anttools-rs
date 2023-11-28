@@ -28,10 +28,13 @@ impl Header {
             return Err(Error::FitTextMissing);
         }
 
-        let checksum = u16::from_le_bytes([from[12], from[13]]);
+        // 12 Byte headers are legacy and don't contain a checksum
+        if header_size >= 14 {
+            let checksum = u16::from_le_bytes([header[12], header[13]]);
 
-        if checksum != 0 && checksum != Self::crc(&from[0..12]) {
-            return Err(Error::ChecksumFailed);
+            if checksum != 0 && checksum != Self::crc(&header[0..12]) {
+                return Err(Error::ChecksumFailed);
+            }
         }
 
         let protocol_version = *header.get(1).unwrap();
@@ -70,6 +73,7 @@ impl Header {
 mod tests {
     use super::*;
 
+    const LEGACY_HEADER: [u8; 12] = [12, 16, 99, 8, 128, 111, 1, 0, 46, 70, 73, 84];
     const VALID_HEADER: [u8; 14] = [14, 32, 99, 8, 128, 111, 1, 0, 46, 70, 73, 84, 158, 67];
     const NO_FIT: [u8; 14] = [14, 32, 99, 8, 128, 111, 1, 0, 0, 0, 0, 0, 158, 67];
     const INVALID_HEADER: [u8; 14] = [14, 32, 99, 8, 128, 111, 1, 0, 46, 70, 73, 84, 158, 66];
@@ -103,6 +107,13 @@ mod tests {
         let result = Header::from(&INVALID_HEADER);
 
         assert_eq!(result, Err(Error::ChecksumFailed));
+    }
+
+    #[test]
+    fn no_crc_legacy() {
+        let result = Header::from(&LEGACY_HEADER);
+
+        assert!(result.is_ok());
     }
 
     #[test]
