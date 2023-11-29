@@ -1,4 +1,5 @@
 use std::str;
+use crate::crc::valid;
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
@@ -33,7 +34,7 @@ impl Header {
         if header_length >= 14 {
             let checksum = u16::from_le_bytes([header[12], header[13]]);
 
-            if checksum != 0 && checksum != Self::crc(&header[0..12]) {
+            if checksum > 0 && !valid(&header[0..12], checksum) {
                 return Err(Error::ChecksumFailed);
             }
         }
@@ -48,26 +49,6 @@ impl Header {
             data_length,
             header_length,
         })
-    }
-
-    fn crc(from: &[u8]) -> u16 {
-        let mut crc: u16 = 0;
-        let crc_table: [u16; 16] = [
-            0x0000, 0xCC01, 0xD801, 0x1400, 0xF001, 0x3C00, 0x2800, 0xE401, 0xA001, 0x6C00, 0x7800,
-            0xB401, 0x5000, 0x9C01, 0x8801, 0x4400,
-        ];
-
-        for byte in from.iter() {
-            let tmp = crc_table[(crc & 0xF) as usize];
-            crc = (crc >> 4) & 0x0FFF;
-            crc = crc ^ tmp ^ crc_table[(byte & 0xF) as usize];
-
-            let tmp = crc_table[(crc & 0xF) as usize];
-            crc = (crc >> 4) & 0x0FFF;
-            crc = crc ^ tmp ^ crc_table[((byte >> 4) & 0xF) as usize];
-        }
-
-        crc
     }
 }
 
