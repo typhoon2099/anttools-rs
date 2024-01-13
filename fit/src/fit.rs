@@ -36,8 +36,11 @@ impl Fit {
             Err(_error) => return Err(Error::FileNotValid),
         };
 
-        let records = data[(header.header_length as usize)
-            ..(header.header_length as usize + header.data_length as usize)]
+        let header_length = header.header_length.into();
+        let data_length = header.data_length as usize;
+
+        let records = data
+            [header_length..(header_length + data_length)]
             .to_vec();
 
         println!("{} {}", records.len(), header.data_length);

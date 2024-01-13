@@ -1,5 +1,5 @@
-use std::str;
 use crate::crc::valid;
+use std::str;
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
@@ -21,10 +21,14 @@ impl Header {
         let header_length = *from.first().unwrap();
 
         if from.len() < header_length.into() {
-            return Err(Error::WrongLength);
+            return Err(Error::WrongLength)
         }
 
         let header = &from[..header_length.into()];
+
+        let protocol_version = *header.get(1).unwrap();
+        let profile_version = u16::from_le_bytes([header[2], header[3]]);
+        let data_length = u32::from_le_bytes([header[4], header[5], header[6], header[7]]);
 
         if str::from_utf8(&header[8..=11]) != Ok(".FIT") {
             return Err(Error::FitTextMissing);
@@ -38,10 +42,6 @@ impl Header {
                 return Err(Error::ChecksumFailed);
             }
         }
-
-        let protocol_version = *header.get(1).unwrap();
-        let profile_version = u16::from_le_bytes([header[2], header[3]]);
-        let data_length = u32::from_le_bytes([header[4], header[5], header[6], header[7]]);
 
         Ok(Header {
             protocol_version,
