@@ -1,3 +1,4 @@
+use crate::crc;
 use crate::header::Header;
 use std::io::Read;
 use std::{fs::File, path::PathBuf};
@@ -43,13 +44,19 @@ impl Fit {
             [header_length..(header_length + data_length)]
             .to_vec();
 
-        println!("{} {}", records.len(), header.data_length);
+        let (data, checksum_bytes) = data.split_at(data.len() - 2);
 
-        Ok(Fit {
-            protocol_version: header.protocol_version,
-            profile_version: header.profile_version,
-            records,
-        })
+        let checksum = u16::from_le_bytes([checksum_bytes[0], checksum_bytes[1]]);
+
+        if crc::valid(data, checksum) {
+            Ok(Fit {
+                protocol_version: header.protocol_version,
+                profile_version: header.profile_version,
+                records,
+            })
+        } else {
+            Err(Error::FileNotValid)
+        }
     }
 }
 
@@ -98,7 +105,16 @@ mod tests {
 
     #[test]
     fn invalid_fit_file_returns_error() {
-        let path: PathBuf = PathBuf::from("../data/Activity_invalid.fit");
+        let path: PathBuf = PathBuf::from("../data/Activity_invalid_header.fit");
+        let activity = Fit::from_file(path);
+        let expected = Err(Error::FileNotValid);
+
+        assert_eq!(activity, expected);
+    }
+
+    #[test]
+    fn invalid_fit_data_returns_error() {
+        let path: PathBuf = PathBuf::from("../data/Activity_invalid_data.fit");
         let activity = Fit::from_file(path);
         let expected = Err(Error::FileNotValid);
 
