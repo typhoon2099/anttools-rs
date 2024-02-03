@@ -28,14 +28,20 @@ impl RecordHeader {
             }
         };
 
-        let message_type_specific = 0b0010_0000 & from == 0b0010_0000;
-        let local_message_type = 0b0000_1111 & from;
-
-        RecordHeader {
-            message_type,
-            message_type_specific,
-            local_message_type,
-            time_offset: None,
+        if let MessageType::CompressedTimestamp = message_type {
+            RecordHeader {
+                message_type,
+                message_type_specific: 0b0010_0000 & from == 0b0010_0000,
+                local_message_type: (0b0110_0000 & from) >> 5,
+                time_offset: Some(0b0001_1111 & from),
+            }
+        } else {
+            RecordHeader {
+                message_type,
+                message_type_specific: 0b0010_0000 & from == 0b0010_0000,
+                local_message_type: 0b0000_1111 & from,
+                time_offset: None,
+            }
         }
     }
 }
@@ -60,22 +66,43 @@ mod tests {
 
     #[test]
     fn message_type_specific() {
-        let header = RecordHeader::from(&0b00100000);
+        let header = RecordHeader::from(&0b0010_0000);
 
         assert!(header.message_type_specific);
     }
 
     #[test]
     fn local_message_type() {
-        let header = RecordHeader::from(&0b01001111);
+        let header = RecordHeader::from(&0b0100_1111);
 
         assert_eq!(header.local_message_type, 15);
     }
 
     #[test]
+    fn time_offset() {
+        let header = RecordHeader::from(&0b0100_0000);
+
+        assert_eq!(header.time_offset, None);
+    }
+
+    #[test]
     fn compressed_timestamp_message() {
-        let header = RecordHeader::from(&0b10000000);
+        let header = RecordHeader::from(&0b1000_0000);
 
         assert_eq!(header.message_type, MessageType::CompressedTimestamp);
+    }
+
+    #[test]
+    fn compressed_local_message_type() {
+        let header = RecordHeader::from(&0b1110_0000);
+
+        assert_eq!(header.local_message_type, 3);
+    }
+
+    #[test]
+    fn compressed_timeoffset() {
+        let header = RecordHeader::from(&0b1001_1111);
+
+        assert_eq!(header.time_offset, Some(31));
     }
 }
