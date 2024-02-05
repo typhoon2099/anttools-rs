@@ -14,34 +14,61 @@ pub struct RecordHeader {
 
 impl RecordHeader {
     pub fn from(from: &u8) -> RecordHeader {
-        let compressed = 0b1000_0000 & from == 0b1000_0000;
+        let message_type = Self::message_type(from);
 
-        let message_type = match compressed {
+        RecordHeader {
+            message_type,
+            message_type_specific: Self::message_type_specific(from),
+            local_message_type: Self::local_message_type(from),
+            time_offset: Self::time_offset(from),
+        }
+    }
+
+    const COMPRESSED: u8 = 0b1000_0000;
+    fn compressed(from: &u8) -> bool {
+        Self::COMPRESSED & from == Self::COMPRESSED
+    }
+
+    fn message_type(from: &u8) -> MessageType {
+        match Self::compressed(from) {
             true => MessageType::CompressedTimestamp,
-            false => {
-                let definition = 0b0100_0000 & from == 0b0100_0000;
+            false => match Self::definition(from) {
+                true => MessageType::Definition,
+                false => MessageType::Data,
+            },
+        }
+    }
 
-                match definition {
-                    true => MessageType::Definition,
-                    false => MessageType::Data,
-                }
-            }
-        };
+    const NORMAL_MESSAGE_TYPE: u8 = 0b0100_0000;
+    fn definition(from: &u8) -> bool {
+        Self::NORMAL_MESSAGE_TYPE & from == Self::NORMAL_MESSAGE_TYPE
+    }
 
-        if let MessageType::CompressedTimestamp = message_type {
-            RecordHeader {
-                message_type,
-                message_type_specific: 0b0010_0000 & from == 0b0010_0000,
-                local_message_type: (0b0110_0000 & from) >> 5,
-                time_offset: Some(0b0001_1111 & from),
-            }
+    const MESSAGE_TYPE_SPECIFIC: u8 = 0b0010_0000;
+    fn message_type_specific(from: &u8) -> bool {
+        if Self::compressed(from) {
+            false
         } else {
-            RecordHeader {
-                message_type,
-                message_type_specific: 0b0010_0000 & from == 0b0010_0000,
-                local_message_type: 0b0000_1111 & from,
-                time_offset: None,
-            }
+            Self::MESSAGE_TYPE_SPECIFIC & from == Self::MESSAGE_TYPE_SPECIFIC
+        }
+    }
+
+    const COMPRESSED_LOCAL_MESSAGE_TYPE: u8 = 0b0110_0000;
+    const NORMAL_LOCAL_MESSAGE_TYPE: u8 = 0b0000_1111;
+    fn local_message_type(from: &u8) -> u8 {
+        if Self::compressed(from) {
+            (Self::COMPRESSED_LOCAL_MESSAGE_TYPE & from) >> 5
+        } else {
+            Self::NORMAL_LOCAL_MESSAGE_TYPE & from
+        }
+    }
+
+    const TIME_OFFSET: u8 = 0b0001_1111;
+    fn time_offset(from: &u8) -> Option<u8> {
+        if Self::compressed(from) {
+            Some(Self::TIME_OFFSET & from)
+        } else {
+            None
         }
     }
 }
