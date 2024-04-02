@@ -1,6 +1,6 @@
 use crate::crc;
 use crate::header::Header;
-use std::io::Read;
+use std::io::{Read, Seek};
 use std::{fs::File, path::PathBuf};
 
 #[derive(Debug, PartialEq)]
@@ -20,39 +20,35 @@ impl Fit {
     pub fn from_file(path: PathBuf) -> Result<Fit, Error> {
         let file = File::open(path);
         match file {
-            Ok(mut file) => {
-                let mut raw = vec![];
-                match file.read_to_end(&mut raw) {
-                    Ok(_) => Fit::from_bytes(raw),
-                    Err(_) => Err(Error::FileNotFound),
-                }
-            }
+            Ok(mut file) => Fit::from_bytes(&mut file),
             Err(_) => Err(Error::FileNotFound),
         }
     }
 
-    pub fn from_bytes(data: Vec<u8>) -> Result<Fit, Error> {
-        let header = match Header::from(&data) {
+    pub fn from_bytes(from: &mut (impl Read + Seek)) -> Result<Fit, Error> {
+        let header = match Header::from(from) {
             Ok(header) => header,
             Err(_error) => return Err(Error::FileNotValid),
         };
 
-        let header_length = header.header_length.into();
-        let data_length = header.data_length as usize;
+        // let data_length = header.data_length as usize;
 
-        let records = data
-            [header_length..(header_length + data_length)]
-            .to_vec();
+        let mut rest = vec![];
 
-        let (data, checksum_bytes) = data.split_at(data.len() - 2);
+        from.read_to_end(&mut rest);
+
+        let (rest, checksum_bytes) = rest.split_at(rest.len() - 2);
 
         let checksum = u16::from_le_bytes([checksum_bytes[0], checksum_bytes[1]]);
 
-        if crc::valid(data, checksum) {
+        let mut checksum_data = vec![];
+        from.rewind();
+        from.read_to_end(&mut checksum_data);
+        if crc::valid(&checksum_data[..(checksum_data.len() - 2)], checksum) {
             Ok(Fit {
                 protocol_version: header.protocol_version,
                 profile_version: header.profile_version,
-                records,
+                records: rest.to_vec(),
             })
         } else {
             Err(Error::FileNotValid)
@@ -63,8 +59,6 @@ impl Fit {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Read;
-    use std::{fs::File, path::PathBuf};
 
     #[test]
     fn file_can_be_loaded() {
@@ -86,10 +80,7 @@ mod tests {
     #[test]
     fn bytes_can_be_loaded() {
         let mut file = File::open("../data/Activity.fit").unwrap();
-        let mut data = vec![];
-        file.read_to_end(&mut data).unwrap();
-
-        let activity = Fit::from_bytes(data).unwrap();
+        let activity = Fit::from_bytes(&mut file).unwrap();
 
         assert_eq!(activity.protocol_version, 32);
     }

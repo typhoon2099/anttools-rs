@@ -1,9 +1,9 @@
 use crate::crc::valid;
+use std::io::{Read, Seek, SeekFrom};
 use std::str;
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
-    WrongLength,
     FitTextMissing,
     ChecksumFailed,
 }
@@ -17,28 +17,47 @@ pub struct Header {
 }
 
 impl Header {
-    pub fn from(from: &[u8]) -> Result<Header, Error> {
-        let header_length = *from.first().unwrap();
+    pub fn from(from: &mut (impl Read + Seek)) -> Result<Header, Error> {
+        let mut header_bytes: [u8; 1] = [0];
+        let _ = from.read(&mut header_bytes);
+        let header_length = header_bytes[0];
 
-        if from.len() < header_length.into() {
-            return Err(Error::WrongLength)
-        }
+        let mut protocol_version_bytes: [u8; 1] = [0];
+        let _ = from.read(&mut protocol_version_bytes);
+        let protocol_version = protocol_version_bytes[0];
 
-        let header = &from[..header_length.into()];
+        let mut profile_version_bytes: [u8; 2] = [0; 2];
+        let _ = from.read(&mut profile_version_bytes);
+        let profile_version = u16::from_le_bytes(profile_version_bytes);
 
-        let protocol_version = *header.get(1).unwrap();
-        let profile_version = u16::from_le_bytes([header[2], header[3]]);
-        let data_length = u32::from_le_bytes([header[4], header[5], header[6], header[7]]);
+        let mut data_length_bytes: [u8; 4] = [0; 4];
+        let _ = from.read(&mut data_length_bytes);
+        let data_length = u32::from_le_bytes(data_length_bytes);
 
-        if str::from_utf8(&header[8..=11]) != Ok(".FIT") {
+        let mut fit_text_bytes: [u8; 4] = [0; 4];
+        let _ = from.read(&mut fit_text_bytes);
+        if str::from_utf8(&fit_text_bytes) != Ok(".FIT") {
             return Err(Error::FitTextMissing);
         }
 
         // 12 Byte headers are legacy and don't contain a checksum
-        if header_length >= 14 {
-            let checksum = u16::from_le_bytes([header[12], header[13]]);
+        if header_length > 12 {
+            const CHECKSUM_SIZE: usize = 2;
+            const CHECKSUMMED_LENGTH: usize = 12;
 
-            if checksum > 0 && !valid(&header[0..12], checksum) {
+            let mut checksum_bytes: [u8; CHECKSUM_SIZE] = [0; 2];
+            let _ = from.read(&mut checksum_bytes);
+            let checksum = u16::from_le_bytes(checksum_bytes);
+
+            let _ = from.rewind();
+            let mut header = vec![0u8; CHECKSUMMED_LENGTH];
+            let mut handle = from.take(CHECKSUMMED_LENGTH as u64);
+            let _ = handle.read_exact(&mut header);
+
+            // Move forward 2 bytes to ignore the checksum
+            let _ = from.seek(SeekFrom::Current(CHECKSUM_SIZE as i64));
+
+            if checksum > 0 && !valid(&header, checksum) {
                 return Err(Error::ChecksumFailed);
             }
         }
@@ -54,6 +73,8 @@ impl Header {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
     use super::*;
 
     const LEGACY_HEADER: [u8; 12] = [12, 16, 99, 8, 128, 111, 1, 0, 46, 70, 73, 84];
@@ -64,7 +85,9 @@ mod tests {
 
     #[test]
     fn properties() {
-        let header = Header::from(&VALID_HEADER).unwrap();
+        let header = Header::from(&mut Cursor::new(VALID_HEADER.as_slice())).unwrap();
+
+        println!("{:?}", header);
 
         assert_eq!(header.protocol_version, 32);
         assert_eq!(header.profile_version, 2147);
@@ -73,36 +96,29 @@ mod tests {
     }
 
     #[test]
-    fn wrong_length() {
-        let result = Header::from(&VALID_HEADER[0..11]);
-
-        assert_eq!(result, Err(Error::WrongLength));
-    }
-
-    #[test]
     fn no_fit_text() {
-        let result = Header::from(&NO_FIT);
+        let result = Header::from(&mut Cursor::new(NO_FIT.as_slice()));
 
         assert_eq!(result, Err(Error::FitTextMissing));
     }
 
     #[test]
     fn invalid_crc() {
-        let result = Header::from(&INVALID_HEADER);
+        let result = Header::from(&mut Cursor::new(INVALID_HEADER.as_slice()));
 
         assert_eq!(result, Err(Error::ChecksumFailed));
     }
 
     #[test]
     fn no_crc_legacy() {
-        let result = Header::from(&LEGACY_HEADER);
+        let result = Header::from(&mut Cursor::new(LEGACY_HEADER.as_slice()));
 
         assert!(result.is_ok());
     }
 
     #[test]
     fn no_crc() {
-        let result = Header::from(&NO_CRC);
+        let result = Header::from(&mut Cursor::new(NO_CRC.as_slice()));
 
         assert!(result.is_ok());
     }
