@@ -96,6 +96,16 @@ mod tests {
     }
 
     #[test]
+    fn leaves_cursor_in_correct_place() {
+        let mut cursor = Cursor::new(VALID_HEADER.as_slice());
+        let _header = Header::from(&mut cursor).unwrap();
+
+        let cursor_position = cursor.stream_position().unwrap();
+
+        assert_eq!(cursor_position, 14);
+    }
+
+    #[test]
     fn no_fit_text() {
         let result = Header::from(&mut Cursor::new(NO_FIT.as_slice()));
 
