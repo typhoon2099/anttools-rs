@@ -5,6 +5,7 @@ pub enum MessageType {
     CompressedTimestamp,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct RecordHeader {
     pub message_type: MessageType,
     pub message_type_specific: bool,
@@ -13,14 +14,14 @@ pub struct RecordHeader {
 }
 
 impl RecordHeader {
-    pub fn from(from: &u8) -> RecordHeader {
-        let message_type = Self::message_type(from);
+    pub fn from(from: u8) -> RecordHeader {
+        let message_type = Self::message_type(&from);
 
         RecordHeader {
             message_type,
-            message_type_specific: Self::message_type_specific(from),
-            local_message_type: Self::local_message_type(from),
-            time_offset: Self::time_offset(from),
+            message_type_specific: Self::message_type_specific(&from),
+            local_message_type: Self::local_message_type(&from),
+            time_offset: Self::time_offset(&from),
         }
     }
 
@@ -79,56 +80,56 @@ mod tests {
 
     #[test]
     fn definition_message() {
-        let header = RecordHeader::from(&0b01000000);
+        let header = RecordHeader::from(0b01000000);
 
         assert_eq!(header.message_type, MessageType::Definition);
     }
 
     #[test]
     fn data_message() {
-        let header = RecordHeader::from(&0);
+        let header = RecordHeader::from(0);
 
         assert_eq!(header.message_type, MessageType::Data);
     }
 
     #[test]
     fn message_type_specific() {
-        let header = RecordHeader::from(&0b0010_0000);
+        let header = RecordHeader::from(0b0010_0000);
 
         assert!(header.message_type_specific);
     }
 
     #[test]
     fn local_message_type() {
-        let header = RecordHeader::from(&0b0100_1111);
+        let header = RecordHeader::from(0b0100_1111);
 
         assert_eq!(header.local_message_type, 15);
     }
 
     #[test]
     fn time_offset() {
-        let header = RecordHeader::from(&0b0100_0000);
+        let header = RecordHeader::from(0b0100_0000);
 
         assert_eq!(header.time_offset, None);
     }
 
     #[test]
     fn compressed_timestamp_message() {
-        let header = RecordHeader::from(&0b1000_0000);
+        let header = RecordHeader::from(0b1000_0000);
 
         assert_eq!(header.message_type, MessageType::CompressedTimestamp);
     }
 
     #[test]
     fn compressed_local_message_type() {
-        let header = RecordHeader::from(&0b1110_0000);
+        let header = RecordHeader::from(0b1110_0000);
 
         assert_eq!(header.local_message_type, 3);
     }
 
     #[test]
     fn compressed_timeoffset() {
-        let header = RecordHeader::from(&0b1001_1111);
+        let header = RecordHeader::from(0b1001_1111);
 
         assert_eq!(header.time_offset, Some(31));
     }
