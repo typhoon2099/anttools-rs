@@ -87,8 +87,6 @@ mod tests {
     fn properties() {
         let header = Header::from(&mut Cursor::new(VALID_HEADER.as_slice())).unwrap();
 
-        println!("{:?}", header);
-
         assert_eq!(header.protocol_version, 32);
         assert_eq!(header.profile_version, 2147);
         assert_eq!(header.data_length, 94080);
