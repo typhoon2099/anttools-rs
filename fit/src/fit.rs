@@ -1,6 +1,7 @@
 use crate::crc;
 use crate::header::Header;
 use std::io::{Read, Seek};
+use std::io::{BufReader, Read, Seek};
 use std::{fs::File, path::PathBuf};
 
 #[derive(Debug, PartialEq)]
@@ -20,7 +21,11 @@ impl Fit {
     pub fn from_file(path: PathBuf) -> Result<Fit, Error> {
         let file = File::open(path);
         match file {
-            Ok(mut file) => Fit::from_bytes(&mut file),
+            Ok(mut file) => {
+                let mut buf = BufReader::new(file);
+
+                Fit::read(&mut buf)
+            },
             Err(_) => Err(Error::FileNotFound),
         }
     }
