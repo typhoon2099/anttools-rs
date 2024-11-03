@@ -1,14 +1,16 @@
 use crate::crc;
 use crate::header::Header;
-use std::io::{Read, Seek};
+use crate::record::Record;
+use crate::record_header::{MessageType, RecordHeader};
 use std::io::{BufReader, Read, Seek};
 use std::{fs::File, path::PathBuf};
 
+// TODO: Make records a new Struct
 #[derive(Debug, PartialEq)]
 pub struct Fit {
     pub protocol_version: u8,
     pub profile_version: u16,
-    pub records: Vec<u8>,
+    pub records: Vec<Record>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -21,49 +23,64 @@ impl Fit {
     pub fn from_file(path: PathBuf) -> Result<Fit, Error> {
         let file = File::open(path);
         match file {
-            Ok(mut file) => {
+            Ok(file) => {
                 let mut buf = BufReader::new(file);
 
                 Fit::read(&mut buf)
-            },
+            }
             Err(_) => Err(Error::FileNotFound),
         }
     }
 
-    pub fn from_bytes(from: &mut (impl Read + Seek)) -> Result<Fit, Error> {
+    fn read(from: &mut BufReader<File>) -> Result<Fit, Error> {
+        let mut checksum_data = vec![];
+        from.read_to_end(&mut checksum_data).unwrap();
+        from.rewind().unwrap();
+
         let header = match Header::from(from) {
             Ok(header) => header,
             Err(_error) => return Err(Error::FileNotValid),
         };
 
-        // let data_length = header.data_length as usize;
-
-        let mut rest = vec![];
-
-        from.read_to_end(&mut rest);
-
-        let (rest, checksum_bytes) = rest.split_at(rest.len() - 2);
-
+        let (checksum_data, checksum_bytes) = checksum_data.split_at(checksum_data.len() - 2);
         let checksum = u16::from_le_bytes([checksum_bytes[0], checksum_bytes[1]]);
-
-        let mut checksum_data = vec![];
-        from.rewind();
-        from.read_to_end(&mut checksum_data);
-        if crc::valid(&checksum_data[..(checksum_data.len() - 2)], checksum) {
-            Ok(Fit {
-                protocol_version: header.protocol_version,
-                profile_version: header.profile_version,
-                records: rest.to_vec(),
-            })
+        if crc::valid(checksum_data, checksum) {
         } else {
-            Err(Error::FileNotValid)
+            return Err(Error::FileNotValid);
         }
+
+        let mut records = vec![];
+
+        let mut record_header_byte = vec![0u8; 1];
+        let _ = from.read_exact(&mut record_header_byte);
+        let next_record_header = RecordHeader::from(record_header_byte[0]);
+
+        match next_record_header.message_type {
+            MessageType::Definition => {
+                records.push(Record::definition(from));
+            }
+            MessageType::Data => {
+                println!("Data");
+                println!("{}", from.stream_position().unwrap());
+            }
+            MessageType::CompressedTimestamp => {
+                println!("CompressedTimestamp");
+                println!("{}", from.stream_position().unwrap());
+            }
+        }
+
+        Ok(Fit {
+            protocol_version: header.protocol_version,
+            profile_version: header.profile_version,
+            records,
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     #[test]
     fn file_can_be_loaded() {
@@ -80,14 +97,6 @@ mod tests {
         let activity = Fit::from_file(path).unwrap();
 
         assert_eq!(activity.records.len(), 94080);
-    }
-
-    #[test]
-    fn bytes_can_be_loaded() {
-        let mut file = File::open("../data/Activity.fit").unwrap();
-        let activity = Fit::from_bytes(&mut file).unwrap();
-
-        assert_eq!(activity.protocol_version, 32);
     }
 
     #[test]

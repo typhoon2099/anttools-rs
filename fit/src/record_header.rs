@@ -5,6 +5,7 @@ pub enum MessageType {
     CompressedTimestamp,
 }
 
+// TODO: Record::Header
 #[derive(Debug, PartialEq)]
 pub struct RecordHeader {
     pub message_type: MessageType,
