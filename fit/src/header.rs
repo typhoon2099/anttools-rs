@@ -45,14 +45,13 @@ impl Header {
             const CHECKSUM_SIZE: usize = 2;
             const CHECKSUMMED_LENGTH: usize = 12;
 
-            let mut checksum_bytes: [u8; CHECKSUM_SIZE] = [0; 2];
+            let mut checksum_bytes: [u8; CHECKSUM_SIZE] = [0; CHECKSUM_SIZE];
             let _ = from.read(&mut checksum_bytes);
             let checksum = u16::from_le_bytes(checksum_bytes);
 
             let _ = from.rewind();
-            let mut header = vec![0u8; CHECKSUMMED_LENGTH];
-            let mut handle = from.take(CHECKSUMMED_LENGTH as u64);
-            let _ = handle.read_exact(&mut header);
+            let mut header:[u8; CHECKSUMMED_LENGTH] = [0; CHECKSUMMED_LENGTH];
+            let _ = from.read_exact(&mut header);
 
             // Move forward 2 bytes to ignore the checksum
             let _ = from.seek(SeekFrom::Current(CHECKSUM_SIZE as i64));
